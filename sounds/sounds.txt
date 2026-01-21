@@ -1,0 +1,18 @@
+ToastMCP sounds: how to name and format them
+
+Supported format
+- WAV only (PCM recommended).
+
+Naming
+- Use short, expressive names (e.g., success, error, alert).
+- Stick to lowercase letters, numbers, and dashes or underscores.
+- The filename (without .wav) becomes the sound id.
+
+Format suggestions
+- Mono or stereo are both fine.
+- 16-bit PCM WAV is the safest choice.
+- Keep clips short and distinct (0.2s?2s is ideal).
+
+Tips
+- Use sounds/backup for working copies while editing or when temporarily removing a sound for testing. We don't ship backup/ dirs, and ToastMCP ignores them.
+- Note: .wav files are git-ignored in this repo.

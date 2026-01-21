@@ -1,0 +1,18 @@
+ToastMCP icons: how to name and size them
+
+Supported format
+- PNG only.
+
+Naming
+- Use short, expressive names (e.g., proud, oops, plan).
+- Stick to lowercase letters, numbers, and dashes or underscores.
+- The filename (without .png) becomes the icon id.
+
+Resolution suggestions
+- Square images work best.
+- 48x48 is the Windows toast default size; 64x64 is a good source size.
+- Keep a little padding so details don't get cropped in the toast.
+
+Tips
+- Transparency is supported (alpha channel).
+- Use icons/backup for working copies while resizing/editing or when temporarily removing an icon for testing. We don't ship backup/ dirs, and ToastMCP ignores them.
