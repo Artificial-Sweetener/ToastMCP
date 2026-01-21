@@ -61,7 +61,7 @@ Name your icons and sounds well, and agents will reach for them naturally—ofte
 
 If `sounds/` is empty, ToastMCP falls back to **Windows system sounds** and exposes those ids instead.
 
-## <img src="icons/think.png" alt="build" width="24"/> Build
+## <img src="icons/thinking.png" alt="build" width="24"/> Build
 ```bash
 cargo build
 ```
