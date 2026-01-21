@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use serde::Deserialize;
 
+use crate::assets::{list_icon_ids, list_sound_ids};
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct NotifyInput {
     pub title: String,
@@ -12,7 +14,17 @@ pub struct NotifyInput {
 }
 
 pub fn notify(input: NotifyInput) -> Result<()> {
-    let icon_path = resolve_icon(&input.icon)?;
+    let icon_path = match resolve_icon(&input.icon) {
+        Ok(path) => path,
+        Err(_) => {
+            let icon_ids = list_icon_ids();
+            return Err(anyhow::anyhow!(
+                "Missing asset: icons/{}.png. Valid icon ids: {}. Use tools/list to refresh.",
+                input.icon,
+                format_ids(&icon_ids)
+            ));
+        }
+    };
     if let Some(sound_path) = find_sound_path(&input.sound) {
         let playback_path = prepare_quiet_wav(&sound_path, 0.7).unwrap_or(sound_path);
         play_sound(&playback_path)?;
@@ -30,7 +42,12 @@ pub fn notify(input: NotifyInput) -> Result<()> {
         return Ok(());
     }
 
-    Err(anyhow::anyhow!("Sound not found: {}", input.sound))
+    let sound_ids = list_sound_ids();
+    Err(anyhow::anyhow!(
+        "Sound not found: {}. Valid sound ids: {}. Use tools/list to refresh.",
+        input.sound,
+        format_ids(&sound_ids)
+    ))
 }
 
 fn prepare_quiet_wav(path: &Path, volume: f32) -> Result<PathBuf> {
@@ -162,6 +179,13 @@ fn resolve_asset(folder: &str, file_name: &str) -> Result<PathBuf> {
         folder,
         file_name
     ))
+}
+
+fn format_ids(ids: &[String]) -> String {
+    if ids.is_empty() {
+        return "none (add assets to the folder)".to_string();
+    }
+    ids.join(", ")
 }
 
 #[cfg(windows)]

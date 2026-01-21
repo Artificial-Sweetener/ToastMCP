@@ -1,3 +1,4 @@
+mod assets;
 mod mcp;
 mod notify;
 
