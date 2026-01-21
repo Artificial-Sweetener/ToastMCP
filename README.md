@@ -8,6 +8,7 @@ ToastMCP is Windows-only for now.
 
 ## <img src="icons/curious.png" alt="what" width="24"/> What it does
 - **`notify`**: gives your coding agents a way to reach you beyond the terminal. They choose the title, message, sound, and icon—so the tone fits the moment, not just the status. The tool exposes every asset you add, so agents can use them creatively.
+- **`list_assets`**: returns the current icon and sound ids ToastMCP can use.
 
 ## <img src="icons/relieved.png" alt="install" width="24"/> Install (ZIP)
 1. Download the latest release ZIP [here](https://github.com/Artificial-Sweetener/ToastMCP/releases/latest).

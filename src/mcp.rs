@@ -4,11 +4,12 @@ use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::assets::{list_icon_ids, list_sound_ids};
 use crate::notify::{notify, NotifyInput};
 
 const PROTOCOL_VERSION: &str = "2024-11-05";
 const SERVER_NAME: &str = "toastmcp";
-const SERVER_VERSION: &str = "0.1.0";
+const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug, Deserialize)]
 struct RpcRequest {
@@ -44,6 +45,15 @@ struct ToolDescription {
     input_schema: Value,
 }
 
+#[derive(Debug, Serialize)]
+struct ResourceDescription {
+    uri: &'static str,
+    name: &'static str,
+    description: &'static str,
+    #[serde(rename = "mimeType")]
+    mime_type: &'static str,
+}
+
 pub fn run() -> Result<()> {
     let stdin = io::stdin();
     let mut reader = BufReader::new(stdin.lock());
@@ -70,6 +80,9 @@ fn handle_request(request: RpcRequest) -> Result<Option<RpcResponse>> {
         "initialize" => Ok(Some(handle_initialize(request))),
         "tools/list" => Ok(Some(handle_tools_list(request))),
         "tools/call" => Ok(Some(handle_tools_call(request))),
+        "resources/list" => Ok(Some(handle_resources_list(request))),
+        "resources/read" => Ok(Some(handle_resources_read(request))),
+        "resource-templates/list" => Ok(Some(handle_resource_templates_list(request))),
         "ping" => Ok(Some(ok_response(request, Value::Null))),
         _ => {
             if let Some(id) = request.id {
@@ -98,7 +111,8 @@ fn handle_initialize(request: RpcRequest) -> RpcResponse {
         serde_json::json!({
             "protocolVersion": protocol_version,
             "capabilities": {
-                "tools": {}
+                "tools": {},
+                "resources": {}
             },
             "serverInfo": {
                 "name": SERVER_NAME,
@@ -114,31 +128,31 @@ fn handle_tools_list(request: RpcRequest) -> RpcResponse {
     let icon_schema = if icon_ids.is_empty() {
         serde_json::json!({
             "type": "string",
-            "description": "Icon id from icons/ folder (without extension)."
+            "description": "Required. Icon id from icons/ folder (without extension). Do not guess; add icons or call tools/list for the current enum."
         })
     } else {
         serde_json::json!({
             "type": "string",
             "enum": icon_ids,
-            "description": "Icon id from icons/ folder (without extension)."
+            "description": "Required. Must be one of the enum values (no guessing)."
         })
     };
     let sound_schema = if sound_ids.is_empty() {
         serde_json::json!({
             "type": "string",
-            "description": "Sound id from sounds/ folder (without extension)."
+            "description": "Required. Sound id from sounds/ folder (without extension). Do not guess; add sounds or call tools/list for the current enum."
         })
     } else {
         serde_json::json!({
             "type": "string",
             "enum": sound_ids,
-            "description": "Sound id from sounds/ folder (without extension). If no sounds exist, Windows system sounds are exposed instead."
+            "description": "Required. Must be one of the enum values (no guessing)."
         })
     };
 
     let tool = ToolDescription {
         name: "notify",
-        description: "Show a system toast and play a chosen sound.",
+        description: "Send a system toast + sound. Use only the provided icon/sound ids (no guessing); call tools/list to see the current enums.",
         input_schema: serde_json::json!({
             "type": "object",
             "additionalProperties": false,
@@ -158,7 +172,18 @@ fn handle_tools_list(request: RpcRequest) -> RpcResponse {
     ok_response(
         request,
         serde_json::json!({
-            "tools": [tool]
+            "tools": [
+                tool,
+                {
+                    "name": "list_assets",
+                    "description": "List available icon and sound ids for ToastMCP.",
+                    "inputSchema": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {}
+                    }
+                }
+            ]
         }),
     )
 }
@@ -177,6 +202,22 @@ fn handle_tools_call(request: RpcRequest) -> RpcResponse {
         .get("name")
         .and_then(Value::as_str)
         .unwrap_or("");
+
+    if name == "list_assets" {
+        let icons = list_icon_ids();
+        let sounds = list_sound_ids();
+        let result = serde_json::json!({
+            "content": [
+                {"type": "text", "text": serde_json::json!({"icons": icons, "sounds": sounds}).to_string()}
+            ]
+        });
+        return RpcResponse {
+            jsonrpc: "2.0",
+            id,
+            result: Some(result),
+            error: None,
+        };
+    }
 
     if name != "notify" {
         return error_response(id, -32602, format!("Unknown tool: {name}"));
@@ -215,6 +256,66 @@ fn handle_tools_call(request: RpcRequest) -> RpcResponse {
         result: Some(result),
         error: None,
     }
+}
+
+fn handle_resources_list(request: RpcRequest) -> RpcResponse {
+    let resources = vec![ResourceDescription {
+        uri: "toastmcp://assets",
+        name: "ToastMCP assets",
+        description: "Lists available icon and sound ids.",
+        mime_type: "application/json",
+    }];
+
+    ok_response(
+        request,
+        serde_json::json!({
+            "resources": resources
+        }),
+    )
+}
+
+fn handle_resource_templates_list(request: RpcRequest) -> RpcResponse {
+    ok_response(
+        request,
+        serde_json::json!({
+            "resourceTemplates": []
+        }),
+    )
+}
+
+fn handle_resources_read(request: RpcRequest) -> RpcResponse {
+    let uri = request
+        .params
+        .get("uri")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+
+    if uri != "toastmcp://assets" {
+        return error_response(
+            request.id.unwrap_or(Value::Null),
+            -32602,
+            format!("Unknown resource: {uri}"),
+        );
+    }
+
+    let icons = list_icon_ids();
+    let sounds = list_sound_ids();
+    let payload = serde_json::json!({
+        "icons": icons,
+        "sounds": sounds
+    })
+    .to_string();
+
+    ok_response(
+        request,
+        serde_json::json!({
+            "contents": [{
+                "uri": "toastmcp://assets",
+                "mimeType": "application/json",
+                "text": payload
+            }]
+        }),
+    )
 }
 
 fn ok_response(request: RpcRequest, result: Value) -> RpcResponse {
@@ -288,96 +389,6 @@ fn read_message(reader: &mut impl BufRead) -> Result<Option<IncomingMessage>> {
     }))
 }
 
-fn list_icon_ids() -> Vec<String> {
-    let mut ids = Vec::new();
-    let mut candidates = Vec::new();
-
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            candidates.push(dir.join("icons"));
-        }
-    }
-    candidates.push(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("icons"));
-
-    for dir in candidates {
-        if let Ok(entries) = std::fs::read_dir(dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().and_then(|ext| ext.to_str()) != Some("png") {
-                    continue;
-                }
-                if path
-                    .parent()
-                    .and_then(|p| p.file_name())
-                    .and_then(|name| name.to_str())
-                    .map(|name| name.eq_ignore_ascii_case("backup"))
-                    .unwrap_or(false)
-                {
-                    continue;
-                }
-                if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                    ids.push(stem.to_string());
-                }
-            }
-        }
-    }
-
-    ids.sort();
-    ids.dedup();
-    ids
-}
-
-fn list_sound_ids() -> Vec<String> {
-    const WINDOWS_SOUND_IDS: &[&str] = &[
-        "default",
-        "im",
-        "mail",
-        "reminder",
-        "sms",
-        "alarm",
-        "incoming_call",
-    ];
-
-    let mut ids = Vec::new();
-    let mut candidates = Vec::new();
-
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            candidates.push(dir.join("sounds"));
-        }
-    }
-    candidates.push(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("sounds"));
-
-    for dir in candidates {
-        if let Ok(entries) = std::fs::read_dir(dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().and_then(|ext| ext.to_str()) != Some("wav") {
-                    continue;
-                }
-                if path
-                    .parent()
-                    .and_then(|p| p.file_name())
-                    .and_then(|name| name.to_str())
-                    .map(|name| name.eq_ignore_ascii_case("backup"))
-                    .unwrap_or(false)
-                {
-                    continue;
-                }
-                if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                    ids.push(stem.to_string());
-                }
-            }
-        }
-    }
-
-    ids.sort();
-    ids.dedup();
-    if ids.is_empty() {
-        return WINDOWS_SOUND_IDS.iter().map(|s| s.to_string()).collect();
-    }
-    ids
-}
 
 fn write_message(writer: &mut impl Write, response: &RpcResponse, framing: Framing) -> Result<()> {
     let payload = serde_json::to_string(response)?;
